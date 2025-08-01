@@ -1,4 +1,4 @@
 # Streamlit frontend requirements for LexiBot
+streamlit>=1.33.0
 pillow>=10.3.0
-streamlit==1.23.0
 requests==2.31.0

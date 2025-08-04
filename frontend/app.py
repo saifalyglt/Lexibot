@@ -1,64 +1,61 @@
 # Streamlit frontend for LexiBot legal document assistant
-                with st.spinner("Processing document..."):
-                    progress = st.progress(0)
-                    for i in range(1, 101):
-                        time.sleep(0.005)
-                        progress.progress(i)
-                    result = upload_document(uploaded_file.getvalue(), uploaded_file.name)
-                    progress.empty()
-                    if result:
-                        st.success("✅ Document uploaded successfully!")
-                        st.json(result)
-                        st.session_state.uploaded_documents.append({
-                            'name': uploaded_file.name,
-                            'chunks': result.get('chunks_created', 0),
-                            'timestamp': time.strftime('%Y-%m-%d %H:%M')
-                        })
-                        st.experimental_rerun()
-        st.subheader("📚 Document Library")
-        docs = get_document_list()
-        if docs:
-            for doc in docs:
-                with st.expander(f"{doc['document_id']}"):
-                    st.write(f"Chunks: {doc['chunk_count']}")
-        else:
-            st.info("No documents uploaded yet.")
+# Updated to connect to Hugging Face Space backend
 
-    # Right: Search
-    with col2:
-        st.header("🔍 Legal Research")
-        query = st.text_area("Enter your legal question:")
-        top_k = st.selectbox("Results:", [3,5,7,10], index=1)
-        if st.button("🚀 Search & Analyze", disabled=not query.strip()):
-            with st.spinner("Analyzing..."):
-                results = search_documents(query.strip(), top_k)
-                if results and 'summary' in results:
-                    st.markdown("### 🤖 AI-Generated Summary")
-                    st.markdown(results['summary'])
-                    if results.get('citations'):
-                        st.markdown("### 📖 Source Citations")
-                        for idx, cit in enumerate(results['citations'], 1):
-                            with st.expander(f"Citation {idx} - {cit['document_id']}"):
-                                st.write(f"Relevance: {cit['score']:.3f}")
-                                st.write(f"> {cit['text']}")
-                        st.session_state.search_history.insert(0, {
-                            'query': query.strip(),
-                            'timestamp': time.strftime('%H:%M:%S'),
-                            'results_count': len(results.get('citations', []))
-                        })
-                else:
-                    st.error("No summary generated.")
+import os
+import requests
+import streamlit as st
+from typing import Dict, Any, List
+import time
 
-        # Search history
-        if st.session_state.search_history:
-            st.subheader("🕒 Recent Searches")
-            for i, h in enumerate(st.session_state.search_history[:5]):
-                with st.expander(f"[{h['timestamp']}] {h['query'][:50]}"):
-                    st.write(f"Query: {h['query']}")
-                    st.write(f"Results: {h['results_count']}")
-                    if st.button("Repeat", key=f"rp_{i}"):
-                        st.experimental_set_query_params(query=h['query'])
-                        st.experimental_rerun()
+# Configure the page
+st.set_page_config(
+    page_title="LexiBot Legal Document Assistant", 
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "LexiBot - AI-powered legal document assistant"
+    }
+)
 
-if __name__ == '__main__':
-    main()
+# Set up constants and endpoints
+# Replace localhost with your HF Space domain
+API_URL = "https://saifaligzr-Lexibot_app.hf.space"
+UPLOAD_ENDPOINT = f"{API_URL}/embed"
+SEARCH_ENDPOINT = f"{API_URL}/summarize"
+DOCUMENTS_ENDPOINT = f"{API_URL}/documents"
+
+# Initialize session state
+if 'uploaded_documents' not in st.session_state:
+    st.session_state.uploaded_documents = []
+if 'search_history' not in st.session_state:
+    st.session_state.search_history = []
+
+# Helper functions
+
+def check_api_connection() -> bool:
+    """Check if the API backend is running."""
+    try:
+        response = requests.get(API_URL, timeout=5)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def upload_document(file_data, filename: str) -> Dict[str, Any]:
+    """Upload a document to the backend."""
+    try:
+        files = {'file': (filename, file_data, 'application/octet-stream')}
+        response = requests.post(UPLOAD_ENDPOINT, files=files, timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        st.error("Upload timeout - please try a smaller file or check your connection.")
+        return {}
+    except Exception as e:
+        st.error(f"Error uploading document: {e}")
+        return {}
+
+
+def search_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
+    """Perform a legal document search."""
+    try:

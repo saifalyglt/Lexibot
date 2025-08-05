@@ -1,5 +1,6 @@
 # Streamlit frontend for LexiBot legal document assistant
 # Updated to connect to your Hugging Face Space backend
+# and use st.rerun() instead of the removed experimental_rerun()
 
 import os
 import requests
@@ -9,7 +10,7 @@ import time
 
 # Configure the page
 st.set_page_config(
-    page_title="LexiBot Legal Document Assistant", 
+    page_title="LexiBot Legal Document Assistant",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
@@ -18,12 +19,10 @@ st.set_page_config(
 )
 
 # ─── Set up constants and endpoints ────────────────────────────────────────────
-# Replace this with your actual HF Space URL (the one you see in your browser
-# when you open your Space). It *must* end with .hf.space, not hug​gingface.co/spaces.
-API_URL           = "https://saifaligzr-lexibot.hf.space"
-UPLOAD_ENDPOINT   = f"{API_URL}/embed"
-SEARCH_ENDPOINT   = f"{API_URL}/summarize"     # or f"{API_URL}/search" if you want the raw search route
-DOCUMENTS_ENDPOINT= f"{API_URL}/documents"
+API_URL            = "https://saifaligzr-lexibot.hf.space"
+UPLOAD_ENDPOINT    = f"{API_URL}/embed"
+SEARCH_ENDPOINT    = f"{API_URL}/summarize"
+DOCUMENTS_ENDPOINT = f"{API_URL}/documents"
 
 # Initialize session state
 if 'uploaded_documents' not in st.session_state:
@@ -34,7 +33,6 @@ if 'search_history' not in st.session_state:
 # ─── Helper functions ─────────────────────────────────────────────────────────
 
 def check_api_connection() -> bool:
-    """Check if the API backend is running."""
     try:
         r = requests.get(API_URL, timeout=5)
         return r.status_code == 200
@@ -42,7 +40,6 @@ def check_api_connection() -> bool:
         return False
 
 def upload_document(file_data, filename: str) -> Dict[str, Any]:
-    """Upload a document to the backend."""
     try:
         files = {'file': (filename, file_data, 'application/octet-stream')}
         r = requests.post(UPLOAD_ENDPOINT, files=files, timeout=60)
@@ -56,7 +53,6 @@ def upload_document(file_data, filename: str) -> Dict[str, Any]:
         return {}
 
 def search_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
-    """Perform a legal document search (or summarization)."""
     try:
         payload = {'query': query, 'top_k': top_k}
         r = requests.post(SEARCH_ENDPOINT, json=payload, timeout=60)
@@ -70,7 +66,6 @@ def search_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
         return {}
 
 def get_document_list() -> List[Dict[str, Any]]:
-    """Get list of uploaded documents from backend."""
     try:
         r = requests.get(DOCUMENTS_ENDPOINT, timeout=10)
         r.raise_for_status()
@@ -85,10 +80,9 @@ st.title("⚖️ LexiBot: Legal Document Assistant")
 st.markdown("*AI-powered legal research and document analysis*")
 
 def main():
-    # Connection check
     if not check_api_connection():
         st.error("❌ Cannot connect to LexiBot API.")
-        st.info("Make sure CORS is enabled in the backend and that API_URL points to your .hf.space domain.")
+        st.info("Make sure CORS is enabled and API_URL is correct.")
         return
     st.success("✅ Connected to LexiBot API")
 
@@ -117,7 +111,7 @@ def main():
                             'chunks': result.get('chunks_created', 0),
                             'timestamp': time.strftime('%Y-%m-%d %H:%M')
                         })
-                        st.experimental_rerun()
+                        st.rerun()
 
         st.subheader("📚 Document Library")
         docs = get_document_list()
@@ -150,6 +144,7 @@ def main():
                             'timestamp': time.strftime('%H:%M:%S'),
                             'results_count': len(results.get('citations', []))
                         })
+                        st.rerun()
                 else:
                     st.error("No summary generated.")
 
@@ -162,7 +157,7 @@ def main():
                     st.write(f"Results: {h['results_count']}")
                     if st.button("Repeat", key=f"rp_{i}"):
                         st.experimental_set_query_params(query=h['query'])
-                        st.experimental_rerun()
+                        st.rerun()
 
 if __name__ == '__main__':
     main()

@@ -1,5 +1,5 @@
 # Streamlit frontend for LexiBot legal document assistant
-# Updated to connect to Hugging Face Space backend
+# Updated to connect to your Hugging Face Space backend
 
 import os
 import requests
@@ -17,12 +17,13 @@ st.set_page_config(
     }
 )
 
-# Set up constants and endpoints
-# Replace localhost with your HF Space domain
-API_URL = "https://saifaligzr-Lexibot_app.hf.space"
-UPLOAD_ENDPOINT = f"{API_URL}/embed"
-SEARCH_ENDPOINT = f"{API_URL}/summarize"
-DOCUMENTS_ENDPOINT = f"{API_URL}/documents"
+# ─── Set up constants and endpoints ────────────────────────────────────────────
+# Replace this with your actual HF Space URL (the one you see in your browser
+# when you open your Space). It *must* end with .hf.space, not hug​gingface.co/spaces.
+API_URL           = "https://saifaligzr-lexibot.hf.space"
+UPLOAD_ENDPOINT   = f"{API_URL}/embed"
+SEARCH_ENDPOINT   = f"{API_URL}/summarize"     # or f"{API_URL}/search" if you want the raw search route
+DOCUMENTS_ENDPOINT= f"{API_URL}/documents"
 
 # Initialize session state
 if 'uploaded_documents' not in st.session_state:
@@ -30,24 +31,23 @@ if 'uploaded_documents' not in st.session_state:
 if 'search_history' not in st.session_state:
     st.session_state.search_history = []
 
-# Helper functions
+# ─── Helper functions ─────────────────────────────────────────────────────────
 
 def check_api_connection() -> bool:
     """Check if the API backend is running."""
     try:
-        response = requests.get(API_URL, timeout=5)
-        return response.status_code == 200
+        r = requests.get(API_URL, timeout=5)
+        return r.status_code == 200
     except Exception:
         return False
-
 
 def upload_document(file_data, filename: str) -> Dict[str, Any]:
     """Upload a document to the backend."""
     try:
         files = {'file': (filename, file_data, 'application/octet-stream')}
-        response = requests.post(UPLOAD_ENDPOINT, files=files, timeout=60)
-        response.raise_for_status()
-        return response.json()
+        r = requests.post(UPLOAD_ENDPOINT, files=files, timeout=60)
+        r.raise_for_status()
+        return r.json()
     except requests.exceptions.Timeout:
         st.error("Upload timeout - please try a smaller file or check your connection.")
         return {}
@@ -55,14 +55,13 @@ def upload_document(file_data, filename: str) -> Dict[str, Any]:
         st.error(f"Error uploading document: {e}")
         return {}
 
-
 def search_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
-    """Perform a legal document search."""
+    """Perform a legal document search (or summarization)."""
     try:
         payload = {'query': query, 'top_k': top_k}
-        response = requests.post(SEARCH_ENDPOINT, json=payload, timeout=60)
-        response.raise_for_status()
-        return response.json()
+        r = requests.post(SEARCH_ENDPOINT, json=payload, timeout=60)
+        r.raise_for_status()
+        return r.json()
     except requests.exceptions.Timeout:
         st.error("Search timeout - please try again.")
         return {}
@@ -70,48 +69,46 @@ def search_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
         st.error(f"Error searching documents: {e}")
         return {}
 
-
 def get_document_list() -> List[Dict[str, Any]]:
     """Get list of uploaded documents from backend."""
     try:
-        response = requests.get(DOCUMENTS_ENDPOINT, timeout=10)
-        response.raise_for_status()
-        return response.json().get('documents', [])
+        r = requests.get(DOCUMENTS_ENDPOINT, timeout=10)
+        r.raise_for_status()
+        return r.json().get('documents', [])
     except Exception as e:
         st.error(f"Error retrieving documents: {e}")
         return []
 
-# Main UI
+# ─── Main UI ──────────────────────────────────────────────────────────────────
+
 st.title("⚖️ LexiBot: Legal Document Assistant")
 st.markdown("*AI-powered legal research and document analysis*")
 
-# Check connection
 def main():
+    # Connection check
     if not check_api_connection():
         st.error("❌ Cannot connect to LexiBot API.")
-        st.info("Ensure CORS is enabled in the backend and redeploy the Space.")
+        st.info("Make sure CORS is enabled in the backend and that API_URL points to your .hf.space domain.")
         return
     st.success("✅ Connected to LexiBot API")
 
     col1, col2 = st.columns([1, 2])
 
-    # Left: Upload and document library
+    # Left: Upload + Document Library
     with col1:
         st.header("📄 Document Management")
-        uploaded_file = st.file_uploader(
-            "Choose a file (PDF or TXT)", type=["pdf", "txt"]
-        )
+        uploaded_file = st.file_uploader("Choose a file (PDF or TXT)", type=["pdf", "txt"])
         if uploaded_file:
             size_kb = len(uploaded_file.getvalue()) / 1024
             st.info(f"**{uploaded_file.name}** — {size_kb:.1f} KB")
             if st.button("🔄 Upload & Process Document"):
                 with st.spinner("Processing document..."):
-                    progress = st.progress(0)
+                    prog = st.progress(0)
                     for i in range(1, 101):
                         time.sleep(0.005)
-                        progress.progress(i)
+                        prog.progress(i)
                     result = upload_document(uploaded_file.getvalue(), uploaded_file.name)
-                    progress.empty()
+                    prog.empty()
                     if result:
                         st.success("✅ Document uploaded successfully!")
                         st.json(result)
@@ -121,6 +118,7 @@ def main():
                             'timestamp': time.strftime('%Y-%m-%d %H:%M')
                         })
                         st.experimental_rerun()
+
         st.subheader("📚 Document Library")
         docs = get_document_list()
         if docs:
@@ -130,11 +128,11 @@ def main():
         else:
             st.info("No documents uploaded yet.")
 
-    # Right: Search
+    # Right: Search & Summarize
     with col2:
         st.header("🔍 Legal Research")
         query = st.text_area("Enter your legal question:")
-        top_k = st.selectbox("Results:", [3,5,7,10], index=1)
+        top_k = st.selectbox("Results:", [3, 5, 7, 10], index=1)
         if st.button("🚀 Search & Analyze", disabled=not query.strip()):
             with st.spinner("Analyzing..."):
                 results = search_documents(query.strip(), top_k)
